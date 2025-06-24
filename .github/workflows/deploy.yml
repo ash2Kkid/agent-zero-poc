@@ -1,40 +1,45 @@
-name: Secure Swarm Deployment
+name: Simple Docker Deployment
 
 on:
   workflow_dispatch:
     inputs:
       cluster:
-        description: 'EU|US Cluster'
-        default: 'EU'
+        description: 'Deploy target (e.g., prod or staging)'
+        default: 'prod'
 
 env:
-  ECR_PATH: ${{ secrets.ECR_FULL_PATH }}   # e.g., 123456789012.dkr.ecr.ap-south-1.amazonaws.com/flask-app
+  ECR_PATH: ${{ secrets.ECR_FULL_PATH }}
   BUILD_TIMESTAMP: ${{ github.run_id }}-${{ github.run_number }}
-  SWARM_CA: /etc/docker/tls/ca.pem
 
 jobs:
   build:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
-    - name: Build Docker image
+
+    - name: Build Docker Image
       run: |
-        echo "Tag: $ECR_PATH:$BUILD_TIMESTAMP"
+        echo "Building image: $ECR_PATH:$BUILD_TIMESTAMP"
         docker build -t $ECR_PATH:$BUILD_TIMESTAMP \
-          --build-arg BUILD_DATE="$BUILD_TIMESTAMP" \
-          .
+          --build-arg BUILD_DATE="$BUILD_TIMESTAMP" .
 
   deploy:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-    - name: Deploy to Docker Swarm
+    - name: Write SSH Private Key
       run: |
-        ssh -i /root/.ssh/swarm_prod_key \
+        echo "${{ secrets.SSH_KEY }}" > key.pem
+        chmod 600 key.pem
+
+    - name: Deploy Docker Container
+      run: |
+        ssh -i key.pem \
           -o StrictHostKeyChecking=accept-new \
-          swarm-admin@${{ secrets.SWARM_MANAGER }} \
-          "docker service update \
-          --image $ECR_PATH:$BUILD_TIMESTAMP \
-          --health-cmd 'curl --cacert $SWARM_CA https://localhost/health' \
-          --health-retries 3 \
-          flask_prod"
+          deploy-user@${{ secrets.DEPLOY_HOST }} \
+          "
+          docker pull $ECR_PATH:$BUILD_TIMESTAMP &&
+          docker stop flask_prod || true &&
+          docker rm flask_prod || true &&
+          docker run -d --name flask_prod -p 80:5000 $ECR_PATH:$BUILD_TIMESTAMP
+          "
