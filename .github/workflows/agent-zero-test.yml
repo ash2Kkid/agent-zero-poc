@@ -28,7 +28,7 @@ jobs:
         pip install -r requirements.txt
     
     - name: Test Agent-Zero Integration
-      run: python test_agent_zero.py
+      run: python tests.py
       env:
         GITHUB_REPOSITORY: ${{ github.repository }}
         GITHUB_SHA: ${{ github.sha }}
