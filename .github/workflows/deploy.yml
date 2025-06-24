@@ -9,7 +9,6 @@ on:
 
 env:
   ECR_PATH: ${{ secrets.ECR_FULL_PATH }}
-  BUILD_TIMESTAMP: 2025-06-24T15:57:44Z
   SWARM_CA: /etc/docker/tls/ca.pem
 
 jobs:
