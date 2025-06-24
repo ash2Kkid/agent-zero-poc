@@ -8,7 +8,8 @@ on:
         default: 'EU'
 
 env:
-  ECR_PATH: ${{ secrets.ECR_FULL_PATH }}
+  ECR_PATH: ${{ secrets.ECR_FULL_PATH }}   # e.g., 123456789012.dkr.ecr.ap-south-1.amazonaws.com/flask-app
+  BUILD_TIMESTAMP: ${{ github.run_id }}-${{ github.run_number }}
   SWARM_CA: /etc/docker/tls/ca.pem
 
 jobs:
@@ -16,16 +17,19 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
     - uses: actions/checkout@v4
-    - run: |
-        /usr/bin/docker build -t $ECR_PATH/app:$BUILD_TIMESTAMP \
+    - name: Build Docker image
+      run: |
+        echo "Tag: $ECR_PATH:$BUILD_TIMESTAMP"
+        docker build -t $ECR_PATH:$BUILD_TIMESTAMP \
           --build-arg BUILD_DATE="$BUILD_TIMESTAMP" \
-          /github/workspace
+          .
 
   deploy:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-    - run: |
+    - name: Deploy to Docker Swarm
+      run: |
         ssh -i /root/.ssh/swarm_prod_key \
           -o StrictHostKeyChecking=accept-new \
           swarm-admin@${{ secrets.SWARM_MANAGER }} \
@@ -34,5 +38,3 @@ jobs:
           --health-cmd 'curl --cacert $SWARM_CA https://localhost/health' \
           --health-retries 3 \
           flask_prod"
-
-
