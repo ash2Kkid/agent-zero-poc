@@ -30,7 +30,7 @@ jobs:
           -o StrictHostKeyChecking=accept-new \
           swarm-admin@${{ secrets.SWARM_MANAGER }} \
           "docker service update \
-          --image $ECR_PATH/app:$BUILD_TIMESTAMP \
+          --image $ECR_PATH:$BUILD_TIMESTAMP \
           --health-cmd 'curl --cacert $SWARM_CA https://localhost/health' \
           --health-retries 3 \
           flask_prod"
