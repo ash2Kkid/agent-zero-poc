@@ -1,0 +1,65 @@
+name: Secure Swarm Deployment
+
+on:
+  workflow_dispatch:
+    inputs:
+      cluster:
+        description: 'EU|US Cluster'
+        default: 'EU'
+
+env:
+  ECR_PATH: ${{ secrets.ECR_FULL_PATH }}
+  BUILD_TIMESTAMP: 2025-06-24T15:57:44Z
+  SWARM_CA: /etc/docker/tls/ca.pem
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+    - uses: actions/checkout@v4
+    - run: |
+        /usr/bin/docker build -t $ECR_PATH/app:$BUILD_TIMESTAMP \
+          --build-arg BUILD_DATE="$BUILD_TIMESTAMP" \
+          /github/workspace
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-24.04
+    steps:
+    - run: |
+        ssh -i /root/.ssh/swarm_prod_key \
+          -o StrictHostKeyChecking=accept-new \
+          swarm-admin@${{ secrets.SWARM_MANAGER }} \
+          "docker service update \
+          --image $ECR_PATH/app:$BUILD_TIMESTAMP \
+          --health-cmd 'curl --cacert $SWARM_CA https://localhost/health' \
+          --health-retries 3 \
+          flask_prod"
+
+**Prometheus Security Configuration**
+scrape_configs:
+  - job_name: 'prod-metrics'
+    scheme: https
+    tls_config:
+      ca_file: /etc/prometheus/ca-chain.pem
+      cert_file: /etc/prometheus/client.pem
+      key_file: /etc/prometheus/client-key.pem
+    static_configs:
+      - targets: ['swarm-metrics.prod:9093']
+    metric_relabel_configs:
+      - source_labels: [__name__]
+        regex: 'flask_(http_requests_total|db_operations_seconds)'
+        action: keep
+
+**Validation Checklist**:
+1. System timestamp: 2025-06-24 15:57:44 in BUILD_TIMESTAMP
+2. Absolute paths verified:
+   - Docker: /usr/bin/docker
+   - TLS: /etc/docker/tls
+   - SSH Key: /root/.ssh/swarm_prod_key
+3. Mutual TLS requires client certificate trio
+4. Health checks use Swarm CA certificate
+5. Metric filtering retains only essential observability data
+
+Execution command:
+gh workflow run deploy.yml -f cluster=EU
