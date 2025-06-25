@@ -8,8 +8,9 @@ on:
         default: 'prod'
 
 env:
-  ECR_PATH: ${{ secrets.ECR_FULL_PATH }}
+  ECR_PATH: 649459255190.dkr.ecr.ap-south-1.amazonaws.com/flask-app
   BUILD_TIMESTAMP: ${{ github.run_id }}-${{ github.run_number }}
+  AWS_REGION: ap-south-1
 
 jobs:
   build:
@@ -17,30 +18,40 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    - name: Configure AWS CLI
+      run: |
+        aws configure set aws_access_key_id ${{ secrets.AWS_ACCESS_KEY_ID }}
+        aws configure set aws_secret_access_key ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+        aws configure set region $AWS_REGION
+
+    - name: Login to Amazon ECR
+      run: |
+        aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_PATH
+
     - name: Build Docker Image
       run: |
         echo "Building image: $ECR_PATH:$BUILD_TIMESTAMP"
-        docker build -t $ECR_PATH:$BUILD_TIMESTAMP \
-          --build-arg BUILD_DATE="$BUILD_TIMESTAMP" .
+        docker build -t $ECR_PATH:$BUILD_TIMESTAMP --build-arg BUILD_DATE="$BUILD_TIMESTAMP" .
+
+    - name: Push Image to ECR
+      run: |
+        docker push $ECR_PATH:$BUILD_TIMESTAMP
 
   deploy:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-      - name: Write SSH Private Key
-        run: |
-          echo "${{ secrets.SSH_KEY }}" > server.pem
-          chmod 600 server.pem
+    - name: Write SSH Private Key
+      run: |
+        echo "${{ secrets.SSH_KEY }}" > key.pem
+        chmod 600 key.pem
 
-      - name: Deploy Docker Container
-        run: |
-          ssh -i server.pem \
-            -o StrictHostKeyChecking=accept-new \
-            ec2-user@${{ secrets.DEPLOY_HOST }} \
-            "
-            docker pull $ECR_PATH:$BUILD_TIMESTAMP &&
-            docker stop flask_prod || true &&
-            docker rm flask_prod || true &&
-            docker run -d --name flask_prod -p 80:5000 $ECR_PATH:$BUILD_TIMESTAMP
-            "
-
+    - name: Deploy Docker Container on EC2
+      run: |
+        ssh -i key.pem -o StrictHostKeyChecking=accept-new ec2-user@${{ secrets.DEPLOY_HOST }} <<EOF
+          aws ecr get-login-password --region $AWS_REGION | docker login --username AWS --password-stdin $ECR_PATH
+          docker pull $ECR_PATH:$BUILD_TIMESTAMP
+          docker stop flask_prod || true
+          docker rm flask_prod || true
+          docker run -d --name flask_prod -p 80:5000 $ECR_PATH:$BUILD_TIMESTAMP
+        EOF
