@@ -27,19 +27,20 @@ jobs:
     needs: build
     runs-on: ubuntu-24.04
     steps:
-    - name: Write SSH Private Key
-      run: |
-        echo "${{ secrets.SSH_KEY }}" > key.pem
-        chmod 600 key.pem
+      - name: Write SSH Private Key
+        run: |
+          echo "${{ secrets.SSH_KEY }}" > key.pem
+          chmod 600 key.pem
+    
+      - name: Deploy Docker Container
+        run: |
+          ssh -i key.pem \
+            -o StrictHostKeyChecking=accept-new \
+            ubuntu@${{ secrets.DEPLOY_HOST }} \
+            "
+            docker pull $ECR_PATH:$BUILD_TIMESTAMP &&
+            docker stop flask_prod || true &&
+            docker rm flask_prod || true &&
+            docker run -d --name flask_prod -p 80:5000 $ECR_PATH:$BUILD_TIMESTAMP
+            "
 
-    - name: Deploy Docker Container
-      run: |
-        ssh -i key.pem \
-          -o StrictHostKeyChecking=accept-new \
-          deploy-user@${{ secrets.DEPLOY_HOST }} \
-          "
-          docker pull $ECR_PATH:$BUILD_TIMESTAMP &&
-          docker stop flask_prod || true &&
-          docker rm flask_prod || true &&
-          docker run -d --name flask_prod -p 80:5000 $ECR_PATH:$BUILD_TIMESTAMP
-          "
