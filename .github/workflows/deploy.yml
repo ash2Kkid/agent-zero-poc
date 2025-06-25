@@ -29,12 +29,12 @@ jobs:
     steps:
       - name: Write SSH Private Key
         run: |
-          echo "${{ secrets.SSH_KEY }}" > key.pem
-          chmod 600 key.pem
+          echo "${{ secrets.SSH_KEY }}" > server.pem
+          chmod 600 server.pem
 
       - name: Deploy Docker Container
         run: |
-          ssh -i key.pem \
+          ssh -i server.pem \
             -o StrictHostKeyChecking=accept-new \
             ec2-user@${{ secrets.DEPLOY_HOST }} \
             "
