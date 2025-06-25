@@ -31,12 +31,12 @@ jobs:
         run: |
           echo "${{ secrets.SSH_KEY }}" > key.pem
           chmod 600 key.pem
-    
+
       - name: Deploy Docker Container
         run: |
           ssh -i key.pem \
             -o StrictHostKeyChecking=accept-new \
-            ubuntu@${{ secrets.DEPLOY_HOST }} \
+            ec2-user@${{ secrets.DEPLOY_HOST }} \
             "
             docker pull $ECR_PATH:$BUILD_TIMESTAMP &&
             docker stop flask_prod || true &&
